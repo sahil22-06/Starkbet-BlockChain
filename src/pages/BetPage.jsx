@@ -3,53 +3,62 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useWallet } from '../App';
 import { STRK } from '../lib/starkzap';
-import { Amount, fromAddress } from 'starkzap';
+import { Amount } from 'starkzap';
 import YieldTicker from '../components/YieldTicker';
 import LoginButton from '../components/LoginButton';
 
 export default function BetPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { wallet } = useWallet();
-
+  const navigate = useNavigate();
+  
   const [bet, setBet] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+  const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState(null);
   const [joinStep, setJoinStep] = useState('');
-  
   const [alreadyJoined, setAlreadyJoined] = useState(false);
   const [selectedSide, setSelectedSide] = useState(null);
 
-  const fetchBetData = async () => {
+  useEffect(() => {
+    if (!id) {
+      setError('No bet ID found in URL');
+      setLoading(false);
+      return;
+    }
+    fetchBet();
+  }, [id]);
+
+  async function fetchBet() {
     try {
-      const { data, error } = await supabase
+      setLoading(true);
+      setError(null);
+      
+      const { data, error: sbError } = await supabase
         .from('bets')
         .select('*, bet_positions(*)')
         .eq('id', id)
         .single();
-        
-      if (error) throw error;
+      
+      if (sbError) throw new Error(sbError.message);
+      if (!data) throw new Error('Bet not found');
+      
       setBet(data);
-
+      
       if (wallet && data.bet_positions) {
-        const walletAddr = wallet.address.toString();
-        const joined = data.bet_positions.some(pos => pos.user_address === walletAddr);
+        const userAddress = wallet.address.toString();
+        const joined = data.bet_positions.some(
+          p => p.user_address === userAddress
+        );
         setAlreadyJoined(joined);
       }
-    } catch (err) {
-      console.error('Error fetching bet:', err);
-      // Graceful handle in render
+    } catch (e) {
+      setError(e.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchBetData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, wallet]);
+  }
 
   const handleJoin = async () => {
     if (!selectedSide) {
@@ -92,7 +101,7 @@ export default function BetPage() {
       setAlreadyJoined(true);
       
       // 7. Refetch
-      await fetchBetData();
+      await fetchBet();
       
       // 8. Done
       setJoinStep('Done!');
@@ -105,247 +114,323 @@ export default function BetPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-neutral-900 flex items-center justify-center page-enter">
-        <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
+  // LOADING STATE
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="glass-strong p-8 rounded-2xl text-center">
+        <div className="animate-spin w-8 h-8 border-2 border-indigo-500 
+                        border-t-transparent rounded-full mx-auto mb-4">
+        </div>
+        <p className="text-white/60">Loading bet...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (!bet) {
-    return (
-      <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col items-center justify-center text-center p-6 page-enter">
-        <h2 className="text-2xl font-bold mb-4">Bet not found</h2>
-        <Link to="/" className="text-indigo-400 hover:text-indigo-300 transition-colors">← Back to home</Link>
+  // ERROR STATE
+  if (error) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="glass-strong p-8 rounded-2xl text-center max-w-md">
+        <p className="text-4xl mb-4">⚠️</p>
+        <p className="text-red-400 font-medium mb-2">Failed to load bet</p>
+        <p className="text-white/50 text-sm mb-6">{error}</p>
+        <button 
+          onClick={() => navigate('/')}
+          className="btn-primary"
+        >
+          Back to Home
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
 
-  // Computed Values
-  const yesPositions = bet.bet_positions?.filter(p => p.side === 'yes') || [];
-  const noPositions = bet.bet_positions?.filter(p => p.side === 'no') || [];
-  const totalParticipants = bet.bet_positions?.length || 0;
-  const totalStaked = (totalParticipants * parseFloat(bet.stake_amount)).toString();
-  
-  const isCreator = wallet && wallet.address.toString() === bet.creator_address;
+  // NULL GUARD
+  if (!bet) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="glass-strong p-8 rounded-2xl text-center">
+        <p className="text-white/60">Bet not found</p>
+        <button onClick={() => navigate('/')} className="btn-primary mt-4">
+          Back to Home
+        </button>
+      </div>
+    </div>
+  );
+
+  // Safe computed values — only run after bet is confirmed not null
+  const positions = bet.bet_positions || [];
+  const yesPositions = positions.filter(p => p.side === 'yes');
+  const noPositions = positions.filter(p => p.side === 'no');
+  const totalParticipants = positions.length;
+  const totalStaked = (
+    totalParticipants * parseFloat(bet.stake_amount || 0)
+  ).toFixed(2);
+  const isCreator = wallet && 
+    wallet.address.toString() === bet.creator_address;
   const isResolved = bet.outcome !== null;
-
-  // Time left calculation
+  
+  // Time remaining
   const resolutionDate = new Date(bet.resolution_date);
   const now = new Date();
-  const timeDiff = resolutionDate - now;
-  
-  let timeLeftDesc = 'Resolving soon';
-  if (timeDiff > 0) {
-    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    timeLeftDesc = `${days} days ${hours} hours remaining`;
-  } else {
-    timeLeftDesc = 'Resolution period ended';
-  }
+  const diffMs = resolutionDate - now;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor(
+    (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+  );
+  const timeLeft = diffMs > 0 
+    ? diffDays > 0 
+      ? diffDays + ' days left'
+      : diffHours + ' hours left'
+    : 'Expired';
 
-  const formatAddress = (addr) => addr ? `${addr.substring(0, 8)}...` : '';
+  // YES/NO bar percentages
+  const total = yesPositions.length + noPositions.length;
+  const yesPct = total > 0 
+    ? Math.round((yesPositions.length / total) * 100) 
+    : 50;
+  const noPct = 100 - yesPct;
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-neutral-100 font-sans pb-20 page-enter">
-      <nav className="p-6 border-b border-neutral-800 bg-neutral-950 flex justify-between items-center max-w-4xl mx-auto">
-        <Link to="/" className="text-neutral-400 hover:text-white transition-colors flex items-center gap-2">
-          <span>←</span> Back
-        </Link>
-        <LoginButton />
-      </nav>
-
-      <main className="max-w-4xl mx-auto p-6 mt-8 space-y-8">
+    <div className="min-h-screen page-enter">
+      <div className="max-w-3xl mx-auto px-4 py-8">
         
-        {/* SECTION 1 - Header */}
-        <header className="glass-strong p-8 text-center space-y-6">
-          <Link to="/" className="text-neutral-500 hover:text-white transition-colors text-sm font-medium">
-            ← All Bets
-          </Link>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-tight">
-            {bet.title}
-          </h1>
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-            <span className="glass px-4 py-2 rounded-full text-sm flex items-center gap-2">
-              <span className="text-lg">👤</span> <span className="font-mono text-neutral-300">{formatAddress(bet.creator_address)}</span>
+        {/* Back link */}
+        <button 
+          onClick={() => navigate('/')}
+          className="text-white/50 hover:text-white text-sm mb-6 
+                     flex items-center gap-2 transition-colors"
+        >
+          ← Back to Markets
+        </button>
+
+        {/* Header Card */}
+        <div className="glass-strong p-6 rounded-2xl mb-6">
+          <div className="flex flex-wrap items-start 
+                          justify-between gap-4 mb-4">
+            <h1 className="text-2xl font-bold text-white flex-1">
+              {bet.title}
+            </h1>
+            {isResolved && (
+              <span className="badge-resolved">Resolved</span>
+            )}
+          </div>
+          
+          <div className="flex flex-wrap gap-3">
+            <span className="glass px-3 py-1 rounded-full text-xs 
+                             text-white/50">
+              👤 {bet.creator_address.slice(0,6)}...
+                 {bet.creator_address.slice(-4)}
             </span>
-            <span className={`glass px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 ${timeDiff > 0 && timeDiff < 86400000 ? 'text-amber-400 border-amber-500/30' : 'text-neutral-300'}`}>
-              <span className="text-lg">⏰</span> {timeLeftDesc}
+            <span className={`glass px-3 py-1 rounded-full text-xs
+              ${diffMs < 86400000 
+                ? 'text-amber-400' 
+                : 'text-white/50'}`}>
+              ⏰ {timeLeft}
             </span>
           </div>
-        </header>
+        </div>
 
-        {/* RESOLVED BANNER */}
+        {/* Resolved Banner */}
         {isResolved && (
-          <div className={`glass-card p-6 text-center text-xl font-bold shadow-2xl ${bet.outcome === 'yes' ? 'border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.15)] text-emerald-400' : 'border-rose-500/50 shadow-[0_0_30px_rgba(244,63,94,0.15)] text-rose-400'}`}>
-            {bet.outcome === 'yes' ? '✅ YES Won — Winners have been paid' : '❌ NO Won — Winners have been paid'}
+          <div className={`p-5 rounded-2xl mb-6 text-center
+            ${bet.outcome === 'yes'
+              ? 'bg-green-500/10 border border-green-500/30'
+              : 'bg-red-500/10 border border-red-500/30'}`}>
+            <p className={`text-2xl font-bold
+              ${bet.outcome === 'yes' 
+                ? 'text-green-400' 
+                : 'text-red-400'}`}>
+              {bet.outcome === 'yes' 
+                ? '✅ YES Won' 
+                : '❌ NO Won'}
+            </p>
+            <p className="text-white/50 text-sm mt-1">
+              Winners have been paid
+            </p>
           </div>
         )}
 
-        {/* SECTION 2 - Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="glass-card p-5 text-center flex flex-col justify-center">
-            <div className="stat-label mb-1">Total Staked</div>
-            <div className="strk-amount text-2xl">{totalStaked} STRK</div>
+        {/* Stats Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="glass-card p-4">
+            <p className="stat-label">Total Staked</p>
+            <p className="strk-amount text-xl">{totalStaked} STRK</p>
           </div>
-          <div className="glass-card p-5 text-center flex flex-col justify-center border-emerald-500/20">
-            <div className="stat-label mb-1">YES Bettors</div>
-            <div className="text-2xl font-bold text-emerald-400">{yesPositions.length}</div>
+          <div className="glass-card p-4">
+            <p className="stat-label">Bettors</p>
+            <p className="stat-value">{totalParticipants}</p>
           </div>
-          <div className="glass-card p-5 text-center flex flex-col justify-center border-rose-500/20">
-            <div className="stat-label mb-1">NO Bettors</div>
-            <div className="text-2xl font-bold text-rose-400">{noPositions.length}</div>
+          <div className="glass-card p-4">
+            <p className="stat-label">YES / NO</p>
+            <p className="stat-value">
+              <span className="text-green-400">{yesPositions.length}</span>
+              <span className="text-white/30"> / </span>
+              <span className="text-red-400">{noPositions.length}</span>
+            </p>
           </div>
-          <div className="glass-card p-5 text-center flex flex-col justify-center border-indigo-500/20">
-            <div className="stat-label mb-1">Yield Earned</div>
-            <div className="yield-positive text-xl mt-1">
-               <YieldTicker wallet={wallet} poolAddress={bet.pool_contract} />
-            </div>
-          </div>
-        </div>
-
-        {/* YES/NO SPLIT BAR */}
-        <div className="glass-card p-6">
-          <div className="flex justify-between w-full text-sm font-bold mb-3">
-             <span className="text-emerald-500">{yesPositions.length} Staked YES</span>
-             <span className="text-rose-500">{noPositions.length} Staked NO</span>
-          </div>
-          <div className="h-3 w-full bg-neutral-800 rounded-full overflow-hidden flex">
-             {totalParticipants > 0 ? (
-               <>
-                 <div className="bg-emerald-500 transition-all duration-1000 ease-out" style={{ width: `${(yesPositions.length / totalParticipants) * 100}%` }} />
-                 <div className="bg-rose-500 transition-all duration-1000 ease-out" style={{ width: `${(noPositions.length / totalParticipants) * 100}%` }} />
-               </>
-             ) : (
-               <>
-                 <div className="bg-neutral-600 transition-all w-1/2" />
-                 <div className="bg-neutral-600 opacity-50 transition-all w-1/2" />
-               </>
-             )}
+          <div className="glass-card p-4">
+            <p className="stat-label">Yield Earned</p>
+            <YieldTicker wallet={wallet} poolAddress={bet.pool_contract} />
           </div>
         </div>
 
-        {/* ALREADY JOINED BANNER */}
-        {alreadyJoined && (
-          <div className="glass-card border-l-4 border-l-emerald-500 p-5 flex items-center gap-3">
-            <div className="text-emerald-500 text-xl">✓</div>
-            <div>
-              <div className="font-bold text-emerald-400">You're in this bet</div>
-              <div className="text-sm text-neutral-400 mt-1">
-                Side: <span className="uppercase font-bold text-white">{bet.bet_positions.find(p => p.user_address === wallet.address.toString())?.side}</span>
-              </div>
-            </div>
+        {/* YES/NO Bar */}
+        <div className="glass-card p-4 mb-6">
+          <div className="flex justify-between text-xs mb-2">
+            <span className="text-green-400 font-medium">
+              YES {yesPct}%
+            </span>
+            <span className="text-red-400 font-medium">
+              NO {noPct}%
+            </span>
           </div>
-        )}
+          <div className="h-3 rounded-full overflow-hidden bg-white/5">
+            <div 
+              className="h-full bg-gradient-to-r from-green-500 
+                         to-green-400 rounded-full transition-all 
+                         duration-700"
+              style={{ width: yesPct + '%' }}
+            />
+          </div>
+        </div>
 
-        {/* SECTION 3 - Join Panel */}
+        {/* Join Panel */}
         {!isResolved && !alreadyJoined && (
-          <section className="glass-strong p-8">
+          <div className="glass-strong p-6 rounded-2xl mb-6">
+            <p className="stat-label mb-4">Choose Your Side</p>
+            
             {!wallet ? (
-              <div className="text-center py-6">
-                <h3 className="text-xl font-bold text-white mb-6">Connect wallet to join this bet</h3>
+              <div className="text-center">
+                <p className="text-white/50 mb-4 text-sm">
+                  Connect wallet to join this bet
+                </p>
                 <LoginButton />
               </div>
             ) : (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <span className="stat-label">CHOOSE YOUR SIDE</span>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <>
+                <div className="flex gap-3 mb-5">
                   <button
                     onClick={() => setSelectedSide('yes')}
-                    disabled={joining}
-                    className={`btn-yes py-6 text-xl text-center ${selectedSide === 'yes' ? 'selected border-emerald-500 glow-green' : 'opacity-70'} ${joining ? 'cursor-not-allowed opacity-50' : ''}`}
+                    className={`flex-1 py-4 rounded-xl font-bold 
+                      text-lg transition-all duration-200
+                      ${selectedSide === 'yes'
+                        ? 'bg-green-500/20 border-2 border-green-500 text-green-400 shadow-lg shadow-green-500/20'
+                        : 'bg-white/5 border border-white/10 text-white/50 hover:border-green-500/50'
+                      }`}
                   >
-                    YES
+                    ✅ YES
                   </button>
                   <button
                     onClick={() => setSelectedSide('no')}
-                    disabled={joining}
-                    className={`btn-no py-6 text-xl text-center ${selectedSide === 'no' ? 'selected border-rose-500 glow-indigo text-rose-500 shadow-[0_0_30px_rgba(239,68,68,0.2)]' : 'opacity-70'} ${joining ? 'cursor-not-allowed opacity-50' : ''}`}
+                    className={`flex-1 py-4 rounded-xl font-bold 
+                      text-lg transition-all duration-200
+                      ${selectedSide === 'no'
+                        ? 'bg-red-500/20 border-2 border-red-500 text-red-400 shadow-lg shadow-red-500/20'
+                        : 'bg-white/5 border border-white/10 text-white/50 hover:border-red-500/50'
+                      }`}
                   >
-                    NO
+                    ❌ NO
                   </button>
                 </div>
 
-                <div className="text-center font-medium text-amber-500">
-                  You stake: {bet.stake_amount} STRK
+                <div className="glass p-3 rounded-xl mb-4">
+                  <p className="text-white/50 text-xs">You stake</p>
+                  <p className="strk-amount text-xl">
+                    {bet.stake_amount} STRK
+                  </p>
                 </div>
 
                 <button
                   onClick={handleJoin}
                   disabled={joining || !selectedSide}
-                  className="btn-primary w-full py-4 text-lg mt-2"
+                  className="btn-primary w-full"
                 >
                   {joining ? (
-                    <div className="flex flex-col items-center justify-center gap-2">
-                       <div className="inline-block animate-spin border-2 border-white border-t-transparent rounded-full w-5 h-5"></div>
-                       <span className="text-xs text-white/70 font-normal">{joinStep}</span>
-                    </div>
+                    <span className="flex items-center 
+                                     justify-center gap-2">
+                      <span className="animate-spin w-4 h-4 
+                        border-2 border-white border-t-transparent 
+                        rounded-full inline-block" />
+                      {joinStep || 'Processing...'}
+                    </span>
                   ) : (
                     'Confirm Bet'
                   )}
                 </button>
 
                 {joinError && (
-                  <div className="glass p-4 border-red-500/30 bg-red-500/10 text-red-400 text-sm font-medium text-center">
+                  <p className="text-red-400 text-sm mt-3">
                     ⚠️ {joinError}
-                  </div>
+                  </p>
                 )}
-              </div>
+              </>
             )}
-          </section>
+          </div>
         )}
 
-        {/* SECTION 5 - Positions List */}
-        <section className="glass-card p-6 space-y-4">
-          <h3 className="text-lg font-bold text-white mb-4 border-b border-white/10 pb-4">Participants ({totalParticipants})</h3>
-          
-          {totalParticipants === 0 ? (
-            <div className="text-center text-neutral-500 py-8 italic">No participants yet.</div>
-          ) : (
+        {/* Already Joined */}
+        {alreadyJoined && (
+          <div className="glass-card p-4 mb-6 
+                          border-l-4 border-green-500">
+            <p className="text-green-400 font-medium">
+              ✓ You are in this bet
+            </p>
+            <p className="text-white/50 text-sm mt-1">
+              Waiting for resolution on {
+                resolutionDate.toLocaleDateString()
+              }
+            </p>
+          </div>
+        )}
+
+        {/* Creator Resolve Button */}
+        {isCreator && !isResolved && (
+          <div className="glass-card p-4 mb-6 
+                          border border-amber-500/30">
+            <p className="text-amber-400 font-medium mb-2">
+              ⚖️ You created this bet
+            </p>
+            <p className="text-white/50 text-sm mb-3">
+              Ready to declare the outcome?
+            </p>
+            <button
+              onClick={() => navigate('/resolve/' + id)}
+              className="bg-amber-500/20 border border-amber-500/50 
+                         text-amber-400 px-4 py-2 rounded-lg 
+                         text-sm font-medium hover:bg-amber-500/30 
+                         transition-all"
+            >
+              Resolve This Bet →
+            </button>
+          </div>
+        )}
+
+        {/* Positions List */}
+        {positions.length > 0 && (
+          <div className="glass-card p-5">
+            <p className="stat-label mb-4">All Positions</p>
             <div className="space-y-2">
-              {bet.bet_positions.map((pos, idx) => (
-                <div key={pos.id} className={`glass-card p-4 flex justify-between items-center ${idx % 2 === 0 ? 'bg-white/[0.02]' : 'bg-transparent'}`}>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-neutral-300">{formatAddress(pos.user_address)}</span>
-                    <span className={pos.side === 'yes' ? 'badge-yes' : 'badge-no'}>
-                      {pos.side}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="strk-amount text-sm">{pos.amount} STRK</span>
-                    <span className="text-xs text-neutral-500 w-24 text-right">
-                      {new Date(pos.joined_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
-                    </span>
-                  </div>
+              {positions.map((p, i) => (
+                <div key={i} 
+                  className="flex items-center justify-between 
+                             py-2 border-b border-white/5 last:border-0">
+                  <span className="text-white/60 font-mono text-xs">
+                    {p.user_address.slice(0,6)}...
+                    {p.user_address.slice(-4)}
+                  </span>
+                  <span className={p.side === 'yes' 
+                    ? 'badge-yes' 
+                    : 'badge-no'}>
+                    {p.side.toUpperCase()}
+                  </span>
+                  <span className="strk-amount text-sm">
+                    {p.amount} STRK
+                  </span>
                 </div>
               ))}
             </div>
-          )}
-        </section>
-
-        {/* SECTION 6 - Creator Actions */}
-        {isCreator && !isResolved && (
-          <section className="glass-card border-amber-500/30 p-8 text-center space-y-5 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-amber-500/50"></div>
-            <div className="text-4xl">⚠️</div>
-            <div>
-              <h3 className="text-amber-400 font-bold text-lg mb-1">You created this bet. Ready to resolve?</h3>
-              <p className="text-sm text-neutral-400">Once the resolution date is reached, you must resolve it to pay out winners.</p>
-            </div>
-            <Link
-              to={`/resolve/${id}`}
-              className="inline-block px-8 py-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/50 font-bold rounded-xl transition-all hover:scale-105"
-            >
-              Resolve Bet →
-            </Link>
-          </section>
+          </div>
         )}
 
-      </main>
+      </div>
     </div>
   );
 }
