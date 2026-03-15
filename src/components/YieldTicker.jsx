@@ -3,6 +3,8 @@ import { getYieldPosition } from '../lib/staking';
 
 export default function YieldTicker({ wallet, poolAddress }) {
   const [rewards, setRewards] = useState('0.000000');
+  const [flash, setFlash] = useState(false);
+  const prevRewardsRef = useRef('0.000000');
 
   useEffect(() => {
     if (!wallet || !poolAddress) return;
@@ -13,18 +15,25 @@ export default function YieldTicker({ wallet, poolAddress }) {
       try {
         const position = await getYieldPosition(wallet, poolAddress);
         if (isMounted && position && !position.rewards.isZero()) {
-          setRewards(position.rewards.toUnit());
+          const freshVal = position.rewards.toUnit();
+          
+          if (freshVal !== prevRewardsRef.current) {
+             if (prevRewardsRef.current !== '0.000000') {
+               setFlash(true);
+               setTimeout(() => {
+                 if (isMounted) setFlash(false);
+               }, 600);
+             }
+             prevRewardsRef.current = freshVal;
+          }
+          setRewards(freshVal);
         }
       } catch (err) {
-        // Just log, do not crash the UI
         console.warn('Failed to fetch yield rewards:', err);
       }
     }
 
-    // Call immediately on mount
     fetchRewards();
-
-    // Set interval for every 8 seconds
     const intervalId = setInterval(fetchRewards, 8000);
 
     return () => {
@@ -40,6 +49,6 @@ export default function YieldTicker({ wallet, poolAddress }) {
   }
 
   return (
-    <span className="text-green-500 font-mono text-sm">+{rewards} STRK yield</span>
+    <span className={`text-green-500 font-mono text-sm ${flash ? 'ticker-flash' : ''}`}>+{rewards} STRK yield</span>
   );
 }

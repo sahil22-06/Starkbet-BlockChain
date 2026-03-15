@@ -44,7 +44,7 @@ export default function Resolve() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-900 flex items-center justify-center">
+      <div className="min-h-screen bg-neutral-900 flex items-center justify-center page-enter">
         <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
       </div>
     );
@@ -52,7 +52,7 @@ export default function Resolve() {
 
   if (!wallet) {
     return (
-      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-center p-6 space-y-6">
+      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-center p-6 space-y-6 page-enter">
         <h2 className="text-2xl font-bold text-white">Connect your wallet to resolve</h2>
         <LoginButton />
         <Link to="/" className="text-indigo-400 hover:text-indigo-300">← Back to home</Link>
@@ -62,7 +62,7 @@ export default function Resolve() {
 
   if (bet && wallet.address.toString() !== bet.creator_address) {
     return (
-      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-center p-6 space-y-4">
+      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-center p-6 space-y-4 page-enter">
         <div className="text-6xl mb-2">🛑</div>
         <h2 className="text-2xl font-bold text-white">You are not the creator of this bet</h2>
         <p className="text-neutral-400">Only the creator can resolve it.</p>
@@ -73,7 +73,7 @@ export default function Resolve() {
 
   if (bet && bet.outcome !== null) {
     return (
-      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-center p-6 space-y-4">
+      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-center p-6 space-y-4 page-enter">
         <div className="text-6xl mb-2">✅</div>
         <h2 className="text-2xl font-bold text-white">
           This bet was already resolved. Outcome: {bet.outcome.toUpperCase()}
@@ -85,7 +85,7 @@ export default function Resolve() {
 
   if (!bet) {
     return (
-      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-center p-6">
+      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-center p-6 page-enter">
         <h2 className="text-2xl font-bold text-white mb-4">Bet not found</h2>
         <Link to="/" className="text-indigo-400">← Back to home</Link>
       </div>
@@ -154,36 +154,37 @@ export default function Resolve() {
   const totalStaked = (totalParticipants * parseFloat(bet.stake_amount)).toString();
 
   // SECTION 3 - Success State
+  // SECTION 3 - Success State
   if (txHash) {
     return (
-      <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col items-center justify-center p-6 font-sans">
-        <div className="bg-neutral-950 border border-emerald-500/30 rounded-3xl p-10 max-w-lg w-full text-center shadow-2xl relative overflow-hidden">
+      <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col items-center justify-center p-6 font-sans page-enter">
+        <div className="glass-strong p-10 max-w-lg w-full text-center relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
           
-          <div className="text-7xl mb-6 animate-bounce">🎊</div>
-          <h1 className="text-3xl font-extrabold text-white mb-2">✅ Bet Resolved!</h1>
+          <div className="text-7xl mb-6 animate-bounce">✅</div>
+          <h1 className="text-3xl font-extrabold text-white mb-2">Bet Resolved!</h1>
           <p className="text-xl text-neutral-300 mb-8">
-            Winning side: <span className="font-bold text-emerald-400">{winningSide.toUpperCase()}</span>
+            Winning side:{' '}
+            <span className={`font-bold ${winningSide === 'yes' ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {winningSide.toUpperCase()}
+            </span>
           </p>
 
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 mb-8 text-left space-y-4">
-            <div>
-              <p className="text-neutral-500 text-sm mb-1">Transaction Hash</p>
-              <p className="font-mono text-sm text-indigo-400 break-all">{txHash}</p>
-            </div>
+          <div className="glass-card p-6 mb-8 text-left space-y-2">
+            <p className="text-neutral-500 stat-label mb-1">Transaction confirmed on Starknet</p>
             <a 
               href={`https://sepolia.voyager.online/tx/${txHash}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+              className="font-mono text-sm text-indigo-400 break-all hover:text-indigo-300 transition-colors inline-block"
             >
-              View on Voyager ↗
+              {txHash} ↗
             </a>
           </div>
 
           <Link
             to="/"
-            className="w-full inline-block bg-neutral-800 hover:bg-neutral-700 text-white font-bold py-4 rounded-xl transition-colors"
+            className="btn-primary w-full inline-block py-4"
           >
             Back to Home
           </Link>
@@ -193,79 +194,87 @@ export default function Resolve() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-neutral-100 font-sans p-6 pb-20">
-      <div className="max-w-3xl mx-auto space-y-8 mt-8">
+    <div className="min-h-screen font-sans p-6 pb-20 page-enter">
+      <div className="max-w-lg mx-auto space-y-8 mt-8">
         
-        <header className="flex justify-between items-center mb-8">
-          <Link to={`/bet/${id}`} className="text-neutral-500 hover:text-white transition-colors">
-            ← Back to Bet
-          </Link>
+        {/* HEADER */}
+        <header className="glass-strong p-6 text-center">
+          <div className="mb-4 text-left">
+            <Link to={`/bet/${id}`} className="text-neutral-500 hover:text-white transition-colors text-sm font-medium">
+              ← Back to Bet
+            </Link>
+          </div>
+          <h1 className="text-3xl font-extrabold text-white mb-2 flex items-center justify-center gap-3">
+            <span>⚖️</span> Resolve Bet
+          </h1>
+          <p className="text-neutral-400 text-sm font-medium">
+            {bet.title}
+          </p>
         </header>
 
-        {/* SECTION 1 - Bet summary */}
-        <section className="bg-neutral-950 border border-neutral-800 rounded-3xl p-8 shadow-xl">
-          <h1 className="text-3xl font-extrabold text-white mb-6 leading-tight">
-            {bet.title}
-          </h1>
-          
-          <div className="grid grid-cols-2 gap-6 bg-neutral-900/50 rounded-2xl p-6 border border-neutral-800/50">
-            <div>
-              <p className="text-neutral-500 text-sm font-medium mb-1">Total Staked</p>
-              <p className="text-2xl font-mono font-bold text-indigo-400">{totalStaked} STRK</p>
+        {/* BET SUMMARY */}
+        <section className="glass-card p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div className="text-center">
+              <p className="stat-label mb-1">Total Staked</p>
+              <p className="strk-amount text-xl">{totalStaked} STRK</p>
             </div>
-            <div>
-              <p className="text-neutral-500 text-sm font-medium mb-1">Participants</p>
-              <p className="text-2xl font-bold text-white">{totalParticipants}</p>
+            <div className="text-center">
+              <p className="stat-label mb-1">Participants</p>
+              <p className="stat-value text-xl">{totalParticipants}</p>
             </div>
           </div>
 
-          <div className="mt-6 flex justify-center bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-4">
-            <div className="text-center">
-              <p className="text-neutral-500 text-xs uppercase tracking-wider font-bold mb-2">Live Pool Yield</p>
+          <div className="glass px-4 py-5 text-center">
+            <p className="stat-label mb-2 text-indigo-300">Yield earned so far — goes to winners</p>
+            <div className="yield-positive text-xl flex justify-center">
               <YieldTicker wallet={wallet} poolAddress={bet.pool_contract} />
             </div>
           </div>
         </section>
 
-        {/* SECTION 2 - Resolution buttons */}
-        <section className="bg-neutral-950 border border-amber-500/30 rounded-3xl p-8 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-amber-500/50"></div>
+        {/* RESOLUTION BUTTONS */}
+        <section className="space-y-6">
+          <h2 className="stat-label text-center text-[13px] tracking-widest text-neutral-400">WHO WON?</h2>
           
-          <h2 className="text-2xl font-bold text-white mb-6 text-center">Who won?</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="space-y-4">
             <button
               onClick={() => handleResolve('yes')}
               disabled={resolving}
-              className="p-8 rounded-2xl border-2 border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-2xl font-extrabold transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+              className={`btn-yes w-full py-6 flex flex-col items-center justify-center gap-1 ${resolving ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              ✅ YES Won
+              <span className="text-2xl font-bold">✅ YES Won</span>
+              <span className="text-xs opacity-80 font-medium">
+                {bet.bet_positions.filter(p => p.side === 'yes').length} winners receive {(parseFloat(bet.stake_amount)).toString()} STRK each + yield share
+              </span>
             </button>
             <button
               onClick={() => handleResolve('no')}
               disabled={resolving}
-              className="p-8 rounded-2xl border-2 border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-2xl font-extrabold transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(244,63,94,0.3)] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+              className={`btn-no w-full py-6 flex flex-col items-center justify-center gap-1 ${resolving ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              ❌ NO Won
+              <span className="text-2xl font-bold">❌ NO Won</span>
+              <span className="text-xs opacity-80 font-medium">
+                {bet.bet_positions.filter(p => p.side === 'no').length} winners receive {(parseFloat(bet.stake_amount)).toString()} STRK each + yield share
+              </span>
             </button>
           </div>
 
-          <p className="text-center text-amber-500/80 font-medium mb-6">
-            ⚠️ This cannot be undone. Winners receive their stake plus yield.
-          </p>
+          <div className="glass-card border-amber-500/30 p-4 text-center">
+            <p className="text-amber-500 text-sm font-medium">
+              ⚠️ This cannot be undone. Payouts happen on-chain.
+            </p>
+          </div>
 
           {resolving && (
-            <div className="flex flex-col items-center justify-center space-y-3 py-6 bg-neutral-900 rounded-2xl border border-neutral-800">
-              <svg className="animate-spin h-8 w-8 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <p className="text-indigo-400 font-medium animate-pulse">{resolveStep}</p>
+            <div className="glass p-6 text-center space-y-3">
+              <div className="inline-block animate-spin border-4 border-indigo-500/30 border-t-indigo-500 rounded-full w-8 h-8 mb-2"></div>
+              <p className="text-indigo-400 font-medium text-sm">{resolveStep}</p>
             </div>
           )}
 
           {resolveError && (
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 font-medium text-center">
+            <div className="glass bg-red-500/10 border-red-500/30 p-4 text-red-500 text-sm font-medium text-center">
               {resolveError}
             </div>
           )}

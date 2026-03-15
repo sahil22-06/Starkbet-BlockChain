@@ -28,10 +28,34 @@ export default function CreateBet() {
     );
   }
 
+
+  // New state added for balance
+  const [balanceStr, setBalanceStr] = useState('0');
+
+  // Fetch balance for display
+  React.useEffect(() => {
+    if (wallet) {
+      wallet.balanceOf(STRK).then(b => {
+        // Simple string conversion for display
+        setBalanceStr((Number(b) / 1e18).toFixed(2));
+      }).catch(e => console.error(e));
+    }
+  }, [wallet]);
+
+  if (!wallet) {
+    return (
+      <div className="min-h-screen font-sans flex items-center justify-center p-6">
+        <div className="glass-card max-w-md w-full p-8 text-center flex flex-col items-center">
+          <h2 className="text-2xl font-bold text-white mb-6">Connect your wallet to create a bet</h2>
+          <LoginButton />
+        </div>
+      </div>
+    );
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // 1. Validate
     const selectedDate = new Date(resolutionDate);
     const today = new Date();
     if (selectedDate <= today) {
@@ -40,17 +64,11 @@ export default function CreateBet() {
     }
 
     try {
-      // 2. Setup Loading State
       setLoading(true);
       setError(null);
       
-      // 3. Check Balance
-      setCurrentStep('Checking balance...');
+      setCurrentStep('Check Balance');
       const balance = await wallet.balanceOf(STRK);
-      // String comparison check handled by Amount.parse wrapper inside stakeForBet or manually:
-      // We will let stakeForBet do the thorough check, but fulfilling the explicit exact numbered instruction:
-      // Note: instruction 3 says "Call wallet.balanceOf(STRK). If insufficient: throw error"
-      // We need to parse amount first to check:
       const { Amount } = await import('starkzap');
       const amountToStake = Amount.parse(stakeAmount.toString(), STRK);
       
@@ -58,16 +76,13 @@ export default function CreateBet() {
         throw new Error(`Insufficient STRK. You need at least ${stakeAmount} STRK to join this bet.`);
       }
 
-      // 4. Find Pool
-      setCurrentStep('Finding staking pool...');
+      setCurrentStep('Find Pool');
       const poolAddress = await getBestPool();
 
-      // 5. Stake
-      setCurrentStep('Staking your STRK...');
+      setCurrentStep('Stake STRK');
       await stakeForBet(wallet, poolAddress, stakeAmount.toString());
 
-      // 6. Save Bet
-      setCurrentStep('Saving bet...');
+      setCurrentStep('Save');
       const { data: betData, error: betError } = await supabase
         .from('bets')
         .insert({
@@ -83,7 +98,6 @@ export default function CreateBet() {
       if (betError) throw new Error('Failed to save bet: ' + betError.message);
       const newBetId = betData.id;
 
-      // 7. Save Position
       const { error: positionError } = await supabase
         .from('bet_positions')
         .insert({
@@ -95,130 +109,161 @@ export default function CreateBet() {
 
       if (positionError) throw new Error('Failed to save your bet position: ' + positionError.message);
 
-      // 8 & 9. Done and Navigate
-      setCurrentStep('Done!');
       navigate(`/bet/${newBetId}`);
       
     } catch (err) {
       setError(err.message);
       setLoading(false);
-      setCurrentStep(''); // Clear step on error
+      setCurrentStep(''); 
     }
   };
 
+  const steps = [
+    'Check Balance',
+    'Find Pool',
+    'Stake STRK',
+    'Save'
+  ];
+
+  const currentStepIndex = steps.indexOf(currentStep);
+
   return (
-    <div className="min-h-screen bg-neutral-900 text-neutral-100 py-12 px-6 font-sans">
-      <div className="max-w-2xl mx-auto bg-neutral-950 border border-neutral-800 rounded-3xl p-8 shadow-2xl">
-        <h1 className="text-3xl font-bold text-white mb-2">Create a New Bet</h1>
-        <p className="text-neutral-400 mb-8">Define the terms, back your opinion, and let the yield accumulate.</p>
+    <div className="min-h-screen font-sans pt-8 px-6 pb-20 page-enter">
+      <div className="max-w-xl mx-auto">
+        <button 
+          onClick={() => navigate('/')} 
+          className="text-neutral-400 hover:text-white mb-6 flex items-center gap-2 font-medium transition-colors"
+        >
+          ← Back to Markets
+        </button>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm font-medium">
-            {error}
-          </div>
-        )}
+        <div className="mb-8">
+          <h1 className="text-4xl font-extrabold text-white mb-2">Create a Bet</h1>
+          <p className="text-neutral-400">Stake STRK. Let it earn yield. Winner takes all + yield.</p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-neutral-300 mb-2">
-              Bet Title
-            </label>
-            <input
-              type="text"
-              required
-              maxLength={100}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Will ETH reach $4k by December?"
-              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium"
-              disabled={loading}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="glass-strong p-6 mb-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* Field 1: Title */}
             <div>
-              <label className="block text-sm font-medium text-neutral-300 mb-2">
-                Stake per person (STRK)
-              </label>
+              <label className="stat-label block mb-2">Bet Title</label>
               <input
-                type="number"
+                type="text"
                 required
-                min="1"
-                step="1"
-                value={stakeAmount}
-                onChange={(e) => setStakeAmount(e.target.value)}
-                placeholder="10"
-                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono"
+                maxLength={100}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Bitcoin hits $100K before June 2025"
+                className={`input-glass ${error?.includes('Title') ? 'border-red-500/50' : ''}`}
                 disabled={loading}
               />
             </div>
 
+            {/* Field 2: Stake */}
             <div>
-              <label className="block text-sm font-medium text-neutral-300 mb-2">
-                Resolution Date
-              </label>
+              <div className="flex justify-between items-end mb-2">
+                <label className="stat-label">Stake per person (STRK)</label>
+                <span className="text-xs text-amber-500 font-mono font-medium">Balance: {balanceStr} STRK</span>
+              </div>
+              <input
+                type="number"
+                required
+                min="1"
+                step="new"
+                value={stakeAmount}
+                onChange={(e) => setStakeAmount(e.target.value)}
+                placeholder="10"
+                className="input-glass font-mono"
+                disabled={loading}
+              />
+              <p className="text-xs text-neutral-500 mt-2">Each participant stakes this amount</p>
+            </div>
+
+            {/* Field 3: Date */}
+            <div>
+              <label className="stat-label block mb-2">Resolves On</label>
               <input
                 type="date"
                 required
                 value={resolutionDate}
                 onChange={(e) => setResolutionDate(e.target.value)}
-                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                className="input-glass"
                 disabled={loading}
               />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-neutral-300 mb-3">
-              Your starting side
-            </label>
-            <div className="grid grid-cols-2 gap-4">
-              <label className={`cursor-pointer border rounded-xl p-4 flex items-center justify-center gap-3 transition-colors ${side === 'yes' ? 'bg-emerald-500/10 border-emerald-500/50 bg-opacity-20' : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'}`}>
-                <input
-                  type="radio"
-                  name="side"
-                  value="yes"
-                  className="hidden"
-                  checked={side === 'yes'}
-                  onChange={() => setSide('yes')}
-                  disabled={loading}
-                />
-                <span className={`font-semibold ${side === 'yes' ? 'text-emerald-400' : 'text-neutral-500'}`}>Yes</span>
-              </label>
-
-              <label className={`cursor-pointer border rounded-xl p-4 flex items-center justify-center gap-3 transition-colors ${side === 'no' ? 'bg-rose-500/10 border-rose-500/50' : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'}`}>
-                <input
-                  type="radio"
-                  name="side"
-                  value="no"
-                  className="hidden"
-                  checked={side === 'no'}
-                  onChange={() => setSide('no')}
-                  disabled={loading}
-                />
-                <span className={`font-semibold ${side === 'no' ? 'text-rose-400' : 'text-neutral-500'}`}>No</span>
-              </label>
+            {/* Field 4: Side */}
+            <div>
+              <label className="stat-label block mb-2">YOUR STARTING SIDE</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div 
+                  onClick={() => !loading && setSide('yes')}
+                  className={`btn-yes flex justify-center items-center py-4 ${side === 'yes' ? 'selected' : 'opacity-60 hover:opacity-100'} ${loading ? 'cursor-not-allowed opacity-50' : ''}`}
+                >
+                  YES
+                </div>
+                <div 
+                  onClick={() => !loading && setSide('no')}
+                  className={`btn-no flex justify-center items-center py-4 ${side === 'no' ? 'selected' : 'opacity-60 hover:opacity-100'} ${loading ? 'cursor-not-allowed opacity-50' : ''}`}
+                >
+                  NO
+                </div>
+              </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {currentStep}
-              </>
-            ) : (
-              'Deploy Bet to Starknet'
-            )}
-          </button>
-        </form>
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary w-full py-4 text-base"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="inline-block animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></div>
+                    {currentStep}...
+                  </div>
+                ) : (
+                  'Create Bet & Stake STRK'
+                )}
+              </button>
+
+              {/* Progress Stepper */}
+              {loading && (
+                <div className="flex justify-between mt-6 px-1">
+                  {steps.map((step, idx) => {
+                    const isActive = currentStepIndex === idx;
+                    const isDone = currentStepIndex > idx;
+                    return (
+                      <div key={step} className="flex flex-col items-center gap-2">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          isDone ? 'bg-green-500 text-white' : 
+                          isActive ? 'bg-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 
+                          'bg-neutral-800 text-neutral-500'
+                        }`}>
+                          {isDone ? '✓' : idx + 1}
+                        </div>
+                        <span className={`text-[10px] font-medium ${
+                          isActive || isDone ? 'text-neutral-300' : 'text-neutral-600'
+                        }`}>{step}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </form>
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="glass px-4 py-3 border-red-500/30 bg-red-500/5">
+            <p className="text-sm font-medium text-red-400 flex items-center gap-2">
+              <span>⚠️</span> {error}
+            </p>
+          </div>
+        )}
+
       </div>
     </div>
   );

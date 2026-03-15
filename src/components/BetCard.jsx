@@ -17,70 +17,91 @@ export default function BetCard({ bet }) {
   const stakeAmountNum = Number(bet.stake_amount) || 0;
   const totalStaked = (totalStakers * stakeAmountNum).toString();
 
-  const formattedDate = new Date(bet.resolution_date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
+  // Use Date logic from original to show days remaining
+  const resolutionDate = new Date(bet.resolution_date);
+  const now = new Date();
+  const timeDiff = resolutionDate - now;
+  const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+  const timeText = daysLeft > 0 ? `${daysLeft} days left` : 'Resolving soon...';
+
+  const yesPct = totalStakers > 0 ? Math.round((yesCount / totalStakers) * 100) : 50;
+  const noPct = totalStakers > 0 ? Math.round((noCount / totalStakers) * 100) : 50;
 
   return (
     <div 
       onClick={() => navigate(`/bet/${bet.id}`)}
-      className="group flex flex-col bg-neutral-900 border border-neutral-800 hover:border-indigo-500/50 rounded-2xl p-6 cursor-pointer transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1 overflow-hidden relative"
+      className="glass-card p-5 flex flex-col cursor-pointer overflow-hidden group h-full"
     >
-      {/* Decorative gradient blur */}
-      <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl group-hover:bg-indigo-500/20 transition-colors pointer-events-none"></div>
-
-      <div className="flex justify-between items-start mb-4">
-        {bet.outcome ? (
-           <span className="px-3 py-1 text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20 rounded-full">
-             Resolved: {bet.outcome.toUpperCase()}
-           </span>
-        ) : (
-           <span className="px-3 py-1 text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full">
-             Active
-           </span>
+      {/* TOP ROW */}
+      <div className="flex justify-between items-start mb-4 gap-3">
+        <h3 className="text-lg font-semibold text-white line-clamp-2 leading-snug flex-1">
+          {bet.title}
+        </h3>
+        {bet.outcome !== null && (
+          <span className="badge-resolved whitespace-nowrap">
+            Resolved
+          </span>
         )}
-        <span className="text-xs text-neutral-500 font-medium">Resolves {formattedDate}</span>
       </div>
 
-      <h3 className="text-xl font-bold text-white mb-6 line-clamp-2 leading-snug">
-        {bet.title}
-      </h3>
-
-      <div className="mt-auto space-y-4">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-neutral-400">Total Pool</span>
-          <span className="font-mono font-bold text-indigo-400">{totalStaked} STRK</span>
+      {/* MIDDLE - Stats row */}
+      <div className="flex flex-wrap gap-4 justify-between mb-5">
+        <div>
+          <div className="stat-label">TOTAL STAKED</div>
+          <div className="stat-value strk-amount">{totalStaked}</div>
         </div>
+        <div>
+          <div className="stat-label">BETTORS</div>
+          <div className="stat-value">{totalStakers}</div>
+        </div>
+        <div>
+          <div className="stat-label">YIELD</div>
+          <div className="stat-value">
+            {wallet && bet.pool_contract ? (
+              <YieldTicker wallet={wallet} poolAddress={bet.pool_contract} className="yield-positive" />
+            ) : (
+              <span className="text-neutral-500 text-sm">--</span>
+            )}
+          </div>
+        </div>
+      </div>
 
-        <div className="h-2 w-full bg-neutral-800 rounded-full overflow-hidden flex">
+      {/* YES/NO BAR */}
+      <div className="mt-auto space-y-2">
+        <div className="flex justify-between text-xs font-semibold mb-1">
+          <span className="text-green-500">{yesPct}% Yes</span>
+          <span className="text-red-500">No {noPct}%</span>
+        </div>
+        
+        <div className="h-1.5 w-full bg-neutral-800 rounded-full overflow-hidden flex">
            {totalStakers > 0 ? (
              <>
                 <div 
-                  className="bg-emerald-500 transition-all" 
-                  style={{ width: `${(yesCount / totalStakers) * 100}%` }}
+                  className="bg-green-500 transition-all" 
+                  style={{ width: `${yesPct}%` }}
                 />
                 <div 
-                  className="bg-rose-500 transition-all" 
-                  style={{ width: `${(noCount / totalStakers) * 100}%` }}
+                  className="bg-red-500 transition-all" 
+                  style={{ width: `${noPct}%` }}
                 />
              </>
            ) : (
-             <div className="w-full bg-neutral-800" />
+             <>
+                <div className="bg-neutral-600 transition-all w-1/2" />
+                <div className="bg-neutral-600 transition-all w-1/2 opacity-50" />
+             </>
            )}
         </div>
+      </div>
 
-        <div className="flex justify-between text-xs font-medium">
-          <span className="text-emerald-500">{yesCount} Yes</span>
-          <span className="text-rose-500">{noCount} No</span>
+      {/* BOTTOM ROW */}
+      <div className="flex justify-between items-center mt-5 pt-4 border-t border-white/5">
+        <div className="text-xs text-neutral-500 flex items-center gap-1.5 font-medium">
+          <span>⏰</span> {timeText}
         </div>
-        
-        {wallet && bet.pool_contract && (
-          <div className="pt-4 mt-4 border-t border-neutral-800/50">
-             <YieldTicker wallet={wallet} poolAddress={bet.pool_contract} />
-          </div>
-        )}
+        <div className="text-xs text-indigo-400 font-semibold group-hover:text-indigo-300 transition-colors">
+          View Bet →
+        </div>
       </div>
     </div>
   );
