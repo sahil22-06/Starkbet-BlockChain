@@ -34,12 +34,16 @@ export default function CreateBet() {
 
   // Fetch balance for display
   React.useEffect(() => {
-    if (wallet) {
-      wallet.balanceOf(STRK).then(b => {
-        // Simple string conversion for display
-        setBalanceStr((Number(b) / 1e18).toFixed(2));
-      }).catch(e => console.error(e));
+    if (!wallet) return;
+    async function fetchBalance() {
+      try {
+        const bal = await wallet.balanceOf(STRK);
+        setBalanceStr(bal.toUnit());
+      } catch (e) {
+        setBalanceStr('0.00');
+      }
     }
+    fetchBalance();
   }, [wallet]);
 
   if (!wallet) {
@@ -128,8 +132,8 @@ export default function CreateBet() {
   const currentStepIndex = steps.indexOf(currentStep);
 
   return (
-    <div className="min-h-screen font-sans pt-8 px-6 pb-20 page-enter">
-      <div className="max-w-xl mx-auto">
+    <div className="min-h-screen page-enter">
+      <div className="max-w-xl mx-auto px-4 py-8">
         <button 
           onClick={() => navigate('/')} 
           className="text-neutral-400 hover:text-white mb-6 flex items-center gap-2 font-medium transition-colors"
@@ -143,7 +147,7 @@ export default function CreateBet() {
         </div>
 
         <div className="glass-strong p-6 mb-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             
             {/* Field 1: Title */}
             <div>
@@ -164,7 +168,7 @@ export default function CreateBet() {
             <div>
               <div className="flex justify-between items-end mb-2">
                 <label className="stat-label">Stake per person (STRK)</label>
-                <span className="text-xs text-amber-500 font-mono font-medium">Balance: {balanceStr} STRK</span>
+                <span className="text-xs text-amber-500 font-mono font-medium">Balance: {balanceStr ? parseFloat(balanceStr).toFixed(2) + ' STRK' : '0.00 STRK'}</span>
               </div>
               <input
                 type="number"
@@ -196,19 +200,31 @@ export default function CreateBet() {
             {/* Field 4: Side */}
             <div>
               <label className="stat-label block mb-2">YOUR STARTING SIDE</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div 
-                  onClick={() => !loading && setSide('yes')}
-                  className={`btn-yes flex justify-center items-center py-4 ${side === 'yes' ? 'selected' : 'opacity-60 hover:opacity-100'} ${loading ? 'cursor-not-allowed opacity-50' : ''}`}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSide('yes')}
+                  className={`flex-1 py-3 rounded-xl font-bold text-lg
+                    transition-all duration-200
+                    ${side === 'yes' 
+                      ? 'bg-green-500/20 border-2 border-green-500 text-green-400 shadow-lg shadow-green-500/20' 
+                      : 'bg-white/5 border border-white/10 text-white/50 hover:border-green-500/50'
+                    }`}
                 >
-                  YES
-                </div>
-                <div 
-                  onClick={() => !loading && setSide('no')}
-                  className={`btn-no flex justify-center items-center py-4 ${side === 'no' ? 'selected' : 'opacity-60 hover:opacity-100'} ${loading ? 'cursor-not-allowed opacity-50' : ''}`}
+                  ✅ YES
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSide('no')}
+                  className={`flex-1 py-3 rounded-xl font-bold text-lg
+                    transition-all duration-200
+                    ${side === 'no'
+                      ? 'bg-red-500/20 border-2 border-red-500 text-red-400 shadow-lg shadow-red-500/20'
+                      : 'bg-white/5 border border-white/10 text-white/50 hover:border-red-500/50'
+                    }`}
                 >
-                  NO
-                </div>
+                  ❌ NO
+                </button>
               </div>
             </div>
 
@@ -257,11 +273,33 @@ export default function CreateBet() {
 
         {/* Error Display */}
         {error && (
-          <div className="glass px-4 py-3 border-red-500/30 bg-red-500/5">
-            <p className="text-sm font-medium text-red-400 flex items-center gap-2">
-              <span>⚠️</span> {error}
-            </p>
-          </div>
+          error.includes('Insufficient STRK') ? (
+            <div className="glass-card p-4 border border-amber-500/30">
+              <p className="text-amber-400 text-sm font-medium mb-2">
+                ⚠️ You need test STRK tokens
+              </p>
+              <p className="text-white/60 text-xs mb-3">
+                Get free test STRK from the Starknet faucet:
+              </p>
+              <a 
+                href="https://starknet-faucet.vercel.app" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-400 text-xs underline hover:text-indigo-300"
+              >
+                → starknet-faucet.vercel.app
+              </a>
+              <p className="text-white/40 text-xs mt-2">
+                Paste your wallet address and request 100 STRK (free)
+              </p>
+            </div>
+          ) : (
+            <div className="glass px-4 py-3 border-red-500/30 bg-red-500/5 mt-6">
+              <p className="text-sm font-medium text-red-400 flex items-center gap-2">
+                <span>⚠️</span> {error}
+              </p>
+            </div>
+          )
         )}
 
       </div>
