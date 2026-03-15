@@ -1,18 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useWallet } from '../App';
 
 export default function LoginButton() {
   const { wallet, handleConnect, loading, error } = useWallet();
 
+  const [copied, setCopied] = useState(false);
+
+  function copyAddress() {
+    navigator.clipboard.writeText(wallet.address.toString());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   if (wallet) {
-    const addressStr = wallet.address.toString();
-    const shortAddress = `${addressStr.substring(0, 6)}...${addressStr.substring(addressStr.length - 4)}`;
-    
     return (
-      <div className="glass px-4 py-2 flex items-center gap-2 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]">
+      <div 
+        onClick={copyAddress}
+        className="cursor-pointer flex items-center gap-2 glass px-3 py-1.5 rounded-full hover:border-green-500/50 transition-all border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]"
+        title="Click to copy full address"
+      >
         <span className="text-green-500 text-xs">●</span>
-        <span className="text-sm text-neutral-200 font-mono font-medium">
-          {shortAddress}
+        <span className="text-white/80 text-xs font-mono font-medium">
+          {copied ? 'Copied! ✓' : 
+            wallet.address.toString().slice(0,6) + '...' + 
+            wallet.address.toString().slice(-4)}
         </span>
       </div>
     );
